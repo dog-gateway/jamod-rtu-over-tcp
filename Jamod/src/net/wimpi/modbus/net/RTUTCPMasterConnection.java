@@ -18,7 +18,7 @@ import net.wimpi.modbus.io.ModbusTransport;
 public class RTUTCPMasterConnection
 {
 	// the log identifier
-	public static String logId = "[RTUTCPMasterConnection]: ";
+	public static final String logId = "[RTUTCPMasterConnection]: ";
 	
 	// the socket upon which sending/receiveing Modbus RTU data
 	private Socket socket;
@@ -115,7 +115,7 @@ public class RTUTCPMasterConnection
 			}
 			
 			// if everything is fine, set the connected flag at false
-			connected = false;
+			this.connected = false;
 		}
 	}// close
 	
@@ -127,107 +127,112 @@ public class RTUTCPMasterConnection
 	 */
 	public ModbusTransport getModbusTransport()
 	{
-		return modbusRTUTCPTransport;
+		return this.modbusRTUTCPTransport;
 	}// getModbusTransport
 	
 	/**
-	 * Prepares the associated <tt>ModbusTransport</tt> of this
-	 * <tt>TCPMasterConnection</tt> for use.
+	 * Prepares the associated {@link ModbusTransport} of this
+	 * {@link RTUTCPMasterConnection} for use.
 	 * 
 	 * @throws IOException
 	 *             if an I/O related error occurs.
 	 */
 	private void prepareTransport() throws IOException
 	{
-		if (modbusRTUTCPTransport == null)
+		//if the modbus transport is not available, create it
+		if (this.modbusRTUTCPTransport == null)
 		{
-			modbusRTUTCPTransport = new ModbusRTUTCPTransport(socket);
+			//create the transport
+			this.modbusRTUTCPTransport = new ModbusRTUTCPTransport(socket);
 		}
 		else
 		{
-			modbusRTUTCPTransport.setSocket(socket);
+			//just update the transport socket
+			this.modbusRTUTCPTransport.setSocket(socket);
 		}
 	}// prepareIO
 	
 	/**
-	 * Returns the timeout for this <tt>TCPMasterConnection</tt>.
+	 * Returns the timeout for this {@link RTUTCPMasterConnection}.
 	 * 
-	 * @return the timeout as <tt>int</tt>.
+	 * @return the timeout as an {@link int} value.
 	 */
 	public int getTimeout()
 	{
-		return socketTimeout;
+		return this.socketTimeout;
 	}// getReceiveTimeout
 	
 	/**
-	 * Sets the timeout for this <tt>TCPMasterConnection</tt>.
+	 * Sets the timeout for this {@link RTUTCPMasterConnection}.
 	 * 
 	 * @param timeout
-	 *            the timeout as <tt>int</tt>.
+	 *            the timeout as an <tt>int</tt>.
 	 */
 	public void setTimeout(int timeout)
 	{
-		socketTimeout = timeout;
-		if (socket != null)
+		//store the current socket timeout
+		this.socketTimeout = timeout;
+		
+		//set the timeout on the socket, if available
+		if (this.socket != null)
 		{
 			try
 			{
-				socket.setSoTimeout(socketTimeout);
+				this.socket.setSoTimeout(socketTimeout);
 			}
 			catch (IOException ex)
 			{
-				// handle?
+				// TODO: handle?
 			}
 		}
 	}// setReceiveTimeout
 	
 	/**
-	 * Returns the destination port of this <tt>TCPMasterConnection</tt>.
+	 * Returns the destination port of this {@link RTUTCPMasterConnection}.
 	 * 
-	 * @return the port number as <tt>int</tt>.
+	 * @return the port number as an <tt>int</tt>.
 	 */
 	public int getPort()
 	{
-		return slaveIPPort;
+		return this.slaveIPPort;
 	}// getPort
 	
 	/**
-	 * Sets the destination port of this <tt>TCPMasterConnection</tt>. The
-	 * default is defined as <tt>Modbus.DEFAULT_PORT</tt>.
+	 * Sets the destination port of this {@link RTUTCPMasterConnection}.
 	 * 
 	 * @param port
 	 *            the port number as <tt>int</tt>.
 	 */
 	public void setPort(int port)
 	{
-		slaveIPPort = port;
+		this.slaveIPPort = port;
 	}// setPort
 	
 	/**
-	 * Returns the destination <tt>InetAddress</tt> of this
-	 * <tt>TCPMasterConnection</tt>.
+	 * Returns the destination {@link InetAddress} of this
+	 * {@link RTUTCPMasterConnection}</tt>.
 	 * 
 	 * @return the destination address as <tt>InetAddress</tt>.
 	 */
 	public InetAddress getAddress()
 	{
-		return slaveIPAddress;
+		return this.slaveIPAddress;
 	}// getAddress
 	
 	/**
-	 * Sets the destination <tt>InetAddress</tt> of this
-	 * <tt>TCPMasterConnection</tt>.
+	 * Sets the destination {@link InetAddress} of this
+	 * {@link RTUTCPMasterConnection}.
 	 * 
 	 * @param adr
-	 *            the destination address as <tt>InetAddress</tt>.
+	 *            the destination address as {@link InetAddress}.
 	 */
 	public void setAddress(InetAddress adr)
 	{
-		slaveIPAddress = adr;
+		this.slaveIPAddress = adr;
 	}// setAddress
 	
 	/**
-	 * Tests if this <tt>TCPMasterConnection</tt> is connected.
+	 * Tests if this {@link RTUTCPMasterConnection} is active or not.
 	 * 
 	 * @return <tt>true</tt> if connected, <tt>false</tt> otherwise.
 	 */

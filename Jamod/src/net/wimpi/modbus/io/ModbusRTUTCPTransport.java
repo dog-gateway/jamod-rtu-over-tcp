@@ -29,13 +29,13 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	
 	// The output stream to which writing the Modbus frames
 	private DataOutputStream outputStream;
-		
+	
 	// The Bytes output stream to use as output buffer for Modbus frames
 	private BytesOutputStream outputBuffer;
 	
 	// The BytesInputStream wrapper for the transport input stream
 	private BytesInputStream inputBuffer;
-
+	
 	// The last request sent over the transport ?? useful ??
 	private byte[] lastRequest = null;
 	
@@ -96,15 +96,9 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	{
 		try
 		{
-			// the data lenght counter
-			int bufferLength;
-			
 			// atomic access to the output buffer
 			synchronized (this.outputBuffer)
 			{
-				// first clear any input from the receive buffer to prepare
-				// for the reply since RTU doesn't have message delimiters
-				this.clearInput();
 				
 				// reset the output buffer
 				this.outputBuffer.reset();
@@ -123,7 +117,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				this.outputBuffer.writeByte(crc[1]);
 				
 				// store the buffer length
-				bufferLength = this.outputBuffer.size();
+				int bufferLength = this.outputBuffer.size();
 				
 				// store the raw output buffer reference
 				byte rawBuffer[] = this.outputBuffer.getBuffer();
@@ -134,12 +128,16 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				this.outputStream.flush();
 				
 				// debug
-				if (Modbus.debug)
-					System.out.println("Sent: " + ModbusUtil.toHex(rawBuffer, 0, bufferLength));
+				// if (Modbus.debug)
+				System.out.println("Sent: " + ModbusUtil.toHex(rawBuffer, 0, bufferLength));
 				
 				// store the written buffer as the last request
 				this.lastRequest = new byte[bufferLength];
 				System.arraycopy(rawBuffer, 0, this.lastRequest, 0, bufferLength);
+				
+				// sleep for the time needed to receive the request at the other
+				// point of the connection
+				Thread.sleep(bufferLength);
 			}
 			
 		}
@@ -157,64 +155,103 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		throw new RuntimeException("Operation not supported.");
 	} // readRequest
 	
-	/**
-	 * Clear the input if characters are found in the input stream.
-	 * 
-	 * @throws IOException
-	 */
-	public void clearInput() throws IOException
-	{
-		// clean data from the input stream if present
-		if (this.inputStream.available() > 0)
-		{
-			// get the length of the available data
-			int len = this.inputStream.available();
-			
-			// allocate a ra buffer for holding the available data
-			byte buf[] = new byte[len];
-			
-			// consume the data
-			this.inputStream.read(buf, 0, len);
-			
-			// debug
-			if (Modbus.debug)
-				System.out.println("Clear input: " + ModbusUtil.toHex(buf, 0, len));
-		}
-	}// cleanInput
-	
 	@Override
+	/**
+	 * Lazy implementation: avoid CRC validation...
+	 */
 	public ModbusResponse readResponse() throws ModbusIOException
 	{
 		// the received response
 		ModbusResponse response = null;
 		
-		// the data length
-		int dlength = 0;
-		
 		try
 		{
-			//atomic access to the input buffer
+			// atomic access to the input buffer
 			synchronized (inputBuffer)
 			{
+				//clean the input buffer
+				inputBuffer.reset(new byte [Modbus.MAX_MESSAGE_LENGTH]);
+				
+				// sleep for the time needed to receive the first part of the
+				// response
+				int available = this.inputStream.available();
+				while (available < 4)
+				{
+					Thread.yield(); // 1ms * #bytes (4bytes in the worst case)
+					available = this.inputStream.available();
+					
+					if(Modbus.debug)
+						System.out.println("Available bytes: "+available);
+				}
+				
+				// get a reference to the inner byte buffer
+				byte inBuffer[] = this.inputBuffer.getBuffer();
+				
+				// read the first 2 bytes from the input stream
+				this.inputStream.read(inBuffer, 0, 2);
+				// this.inputStream.readFully(inBuffer);
+				
 				// read the progressive id
 				int packetId = inputBuffer.readUnsignedByte();
+				
+				// debug
+				System.out.println(ModbusRTUTCPTransport.logId + "Read packet with progressive id: " + packetId);
 				
 				// read the function code
 				int functionCode = inputBuffer.readUnsignedByte();
 				
-				// compute the number of bytes composing the message (including the CRC = 2bytes)
+				// debug
+				System.out.println(" uid: " + packetId + ", function code: " + functionCode);
+				
+				// compute the number of bytes composing the message (including
+				// the CRC = 2bytes)
 				int packetLength = this.computePacketLength(functionCode);
+				
+				// sleep for the time needed to receive the first part of the
+				// response
+				while (this.inputStream.available() < (packetLength-3))
+				{
+					Thread.yield(); // 1ms * #bytes (4bytes in the worst case)
+				}
+				
+				// read the remaining bytes
+				this.inputStream.read(inBuffer, 3, packetLength);
+				
+				// debug
+				System.out.println(" bytes: " + ModbusUtil.toHex(inBuffer, 0, packetLength) + ", desired length: "
+						+ packetLength);
+				
+				// compute the CRC
+				int crc[] = ModbusUtil.calculateCRC(inBuffer, 0, packetLength - 2);
+				
+				// check the CRC against the received one...
+				if (ModbusUtil.unsignedByteToInt(inBuffer[packetLength - 2]) != crc[0]
+						|| ModbusUtil.unsignedByteToInt(inBuffer[packetLength - 1]) != crc[1])
+				{
+					throw new IOException("CRC Error in received frame: " + packetLength + " bytes: "
+							+ ModbusUtil.toHex(inBuffer, 0, packetLength));
+				}
+				
+				// reset the input buffer to the given packet length (excluding
+				// the CRC)
+				this.inputBuffer.reset(inBuffer, packetLength - 2);
+				
+				// create the response
+				response = ModbusResponse.createModbusResponse(functionCode);
+				response.setHeadless();
+				
+				// read the response
+				response.readFrom(inputBuffer);
 			}
 		}
-		catch(IOException e)
+		catch (IOException e)
 		{
-			//debug
-			System.err.println(ModbusRTUTCPTransport.logId+"Error while reading from socket: "+e);
+			// debug
+			System.err.println(ModbusRTUTCPTransport.logId + "Error while reading from socket: " + e);
 			
-			//wrap and re-throw
-			throw new ModbusIOException("I/O exception - failed to read.\n"+e.getMessage());
+			// wrap and re-throw
+			throw new ModbusIOException("I/O exception - failed to read.\n" + e);
 		}
-		
 		
 		// return the response read from the socket stream
 		return response;
@@ -315,10 +352,10 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	
 	private int computePacketLength(int functionCode) throws IOException
 	{
-		//packet length by function code:
+		// packet length by function code:
 		int length = 0;
 		
-		switch(functionCode)
+		switch (functionCode)
 		{
 			case 0x01:
 			case 0x02:
@@ -330,7 +367,11 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 			case 0x15: // write log entry (60000 memory reference)
 			case 0x17:
 			{
-				length = this.inputBuffer.readUnsignedByte() + 4; //UID+FC+CRC(2bytes)
+				// get a reference to the inner byte buffer
+				byte inBuffer[] = this.inputBuffer.getBuffer();
+				this.inputStream.read(inBuffer, 2, 1);
+				int dataLength = this.inputBuffer.readUnsignedByte();
+				length = dataLength + 5; // UID+FC+CRC(2bytes)
 				break;
 			}
 			case 0x05:
@@ -357,13 +398,23 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 			}
 			case 0x18:
 			{
-				length = this.inputStream.readUnsignedShort()+4;//UID+FC+CRC(2bytes)
-			}			
+				// get a reference to the inner byte buffer
+				byte inBuffer[] = this.inputBuffer.getBuffer();
+				this.inputStream.read(inBuffer, 2, 2);
+				length = this.inputBuffer.readUnsignedShort() + 6;// UID+FC+CRC(2bytes)
+				break;
+			}
+			case 0x83:
+			{
+				// error code
+				length = 5;
+				break;
+			}
 		}
 		
 		return length;
 	}
-
+	
 	@Override
 	public void close() throws IOException
 	{
@@ -372,87 +423,38 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	}// close
 	
 	/*
-	private void getResponse(int fn, BytesOutputStream out) throws IOException
-	{
-		int bc = -1, bc2 = -1, bcw = -1;
-		int inpBytes = 0;
-		byte inpBuf[] = new byte[256];
-		
-		try
-		{
-			switch (fn)
-			{
-				case 0x01:
-				case 0x02:
-				case 0x03:
-				case 0x04:
-				case 0x0C:
-				case 0x11: // report slave ID version and run/stop state
-				case 0x14: // read log entry (60000 memory reference)
-				case 0x15: // write log entry (60000 memory reference)
-				case 0x17:
-					// read the byte count;
-					bc = inputStream.read();
-					out.write(bc);
-					// now get the specified number of bytes and the 2 CRC bytes
-					setReceiveThreshold(bc + 2);
-					inpBytes = inputStream.read(inpBuf, 0, bc + 2);
-					out.write(inpBuf, 0, inpBytes);
-					m_CommPort.disableReceiveThreshold();
-					if (inpBytes != bc + 2)
-					{
-						System.out.println("Error: looking for " + (bc + 2) + " bytes, received " + inpBytes);
-					}
-					break;
-				case 0x05:
-				case 0x06:
-				case 0x0B:
-				case 0x0F:
-				case 0x10:
-					// read status: only the CRC remains after address and
-					// function code
-					setReceiveThreshold(6);
-					inpBytes = inputStream.read(inpBuf, 0, 6);
-					out.write(inpBuf, 0, inpBytes);
-					m_CommPort.disableReceiveThreshold();
-					break;
-				case 0x07:
-				case 0x08:
-					// read status: only the CRC remains after address and
-					// function code
-					setReceiveThreshold(3);
-					inpBytes = inputStream.read(inpBuf, 0, 3);
-					out.write(inpBuf, 0, inpBytes);
-					m_CommPort.disableReceiveThreshold();
-					break;
-				case 0x16:
-					// eight bytes in addition to the address and function codes
-					setReceiveThreshold(8);
-					inpBytes = inputStream.read(inpBuf, 0, 8);
-					out.write(inpBuf, 0, inpBytes);
-					m_CommPort.disableReceiveThreshold();
-					break;
-				case 0x18:
-					// read the byte count word
-					bc = inputStream.read();
-					out.write(bc);
-					bc2 = inputStream.read();
-					out.write(bc2);
-					bcw = ModbusUtil.makeWord(bc, bc2);
-					// now get the specified number of bytes and the 2 CRC bytes
-					setReceiveThreshold(bcw + 2);
-					inpBytes = inputStream.read(inpBuf, 0, bcw + 2);
-					out.write(inpBuf, 0, inpBytes);
-					m_CommPort.disableReceiveThreshold();
-					break;
-			}
-		}
-		catch (IOException e)
-		{
-			m_CommPort.disableReceiveThreshold();
-			throw new IOException("getResponse serial port exception");
-		}
-	}// getResponse
-	*/
+	 * private void getResponse(int fn, BytesOutputStream out) throws
+	 * IOException { int bc = -1, bc2 = -1, bcw = -1; int inpBytes = 0; byte
+	 * inpBuf[] = new byte[256];
+	 * 
+	 * try { switch (fn) { case 0x01: case 0x02: case 0x03: case 0x04: case
+	 * 0x0C: case 0x11: // report slave ID version and run/stop state case 0x14:
+	 * // read log entry (60000 memory reference) case 0x15: // write log entry
+	 * (60000 memory reference) case 0x17: // read the byte count; bc =
+	 * inputStream.read(); out.write(bc); // now get the specified number of
+	 * bytes and the 2 CRC bytes setReceiveThreshold(bc + 2); inpBytes =
+	 * inputStream.read(inpBuf, 0, bc + 2); out.write(inpBuf, 0, inpBytes);
+	 * m_CommPort.disableReceiveThreshold(); if (inpBytes != bc + 2) {
+	 * System.out.println("Error: looking for " + (bc + 2) + " bytes, received "
+	 * + inpBytes); } break; case 0x05: case 0x06: case 0x0B: case 0x0F: case
+	 * 0x10: // read status: only the CRC remains after address and // function
+	 * code setReceiveThreshold(6); inpBytes = inputStream.read(inpBuf, 0, 6);
+	 * out.write(inpBuf, 0, inpBytes); m_CommPort.disableReceiveThreshold();
+	 * break; case 0x07: case 0x08: // read status: only the CRC remains after
+	 * address and // function code setReceiveThreshold(3); inpBytes =
+	 * inputStream.read(inpBuf, 0, 3); out.write(inpBuf, 0, inpBytes);
+	 * m_CommPort.disableReceiveThreshold(); break; case 0x16: // eight bytes in
+	 * addition to the address and function codes setReceiveThreshold(8);
+	 * inpBytes = inputStream.read(inpBuf, 0, 8); out.write(inpBuf, 0,
+	 * inpBytes); m_CommPort.disableReceiveThreshold(); break; case 0x18: //
+	 * read the byte count word bc = inputStream.read(); out.write(bc); bc2 =
+	 * inputStream.read(); out.write(bc2); bcw = ModbusUtil.makeWord(bc, bc2);
+	 * // now get the specified number of bytes and the 2 CRC bytes
+	 * setReceiveThreshold(bcw + 2); inpBytes = inputStream.read(inpBuf, 0, bcw
+	 * + 2); out.write(inpBuf, 0, inpBytes);
+	 * m_CommPort.disableReceiveThreshold(); break; } } catch (IOException e) {
+	 * m_CommPort.disableReceiveThreshold(); throw new
+	 * IOException("getResponse serial port exception"); } }// getResponse
+	 */
 	
 }

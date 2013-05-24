@@ -30,7 +30,8 @@ import net.wimpi.modbus.io.ModbusTransport;
  * @author Dieter Wimberger
  * @version @version@ (@date@)
  */
-public class TCPMasterConnection {
+public class TCPMasterConnection implements MasterConnection
+{
 
   //instance attributes
   private Socket m_Socket;
@@ -58,6 +59,7 @@ public class TCPMasterConnection {
    *
    * @throws Exception if there is a network failure.
    */
+  @Override
   public synchronized void connect()
       throws Exception {
     if(!m_Connected) {
@@ -72,6 +74,7 @@ public class TCPMasterConnection {
   /**
    * Closes this <tt>TCPMasterConnection</tt>.
    */
+  @Override
   public void close() {
     if(m_Connected) {
       try {
@@ -178,6 +181,7 @@ public class TCPMasterConnection {
    *
    * @return <tt>true</tt> if connected, <tt>false</tt> otherwise.
    */
+  @Override
   public boolean isConnected() {
     return m_Connected;
   }//isConnected

@@ -15,7 +15,7 @@ import net.wimpi.modbus.io.ModbusTransport;
  * @author bonino
  * 
  */
-public class RTUTCPMasterConnection
+public class RTUTCPMasterConnection implements MasterConnection
 {
 	// the log identifier
 	public static final String logId = "[RTUTCPMasterConnection]: ";
@@ -66,6 +66,7 @@ public class RTUTCPMasterConnection
 	 *             if the connection cannot be open (e.g., due to a network
 	 *             failure).
 	 */
+	@Override
 	public synchronized void connect() throws Exception
 	{
 		// if not connected, try to connect
@@ -96,6 +97,7 @@ public class RTUTCPMasterConnection
 	/**
 	 * Closes the RTU over TCP connection represented by this object.
 	 */
+	@Override
 	public void close()
 	{
 		// if connected... disconnect, otherwise do nothing
@@ -236,6 +238,7 @@ public class RTUTCPMasterConnection
 	 * 
 	 * @return <tt>true</tt> if connected, <tt>false</tt> otherwise.
 	 */
+	@Override
 	public boolean isConnected()
 	{
 		return connected;

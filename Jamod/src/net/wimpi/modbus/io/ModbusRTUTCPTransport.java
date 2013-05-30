@@ -92,7 +92,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	 *            the {@link ModbusMessage} to be written on the transport.
 	 */
 	@Override
-	public void writeMessage(ModbusMessage msg) throws ModbusIOException
+	public synchronized void writeMessage(ModbusMessage msg) throws ModbusIOException
 	{
 		try
 		{
@@ -150,7 +150,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	
 	// This is required for the slave that is not supported
 	@Override
-	public ModbusRequest readRequest() throws ModbusIOException
+	public synchronized ModbusRequest readRequest() throws ModbusIOException
 	{
 		throw new RuntimeException("Operation not supported.");
 	} // readRequest
@@ -159,7 +159,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	/**
 	 * Lazy implementation: avoid CRC validation...
 	 */
-	public ModbusResponse readResponse() throws ModbusIOException
+	public synchronized ModbusResponse readResponse() throws ModbusIOException
 	{
 		// the received response
 		ModbusResponse response = null;
@@ -248,6 +248,17 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		{
 			// debug
 			System.err.println(ModbusRTUTCPTransport.logId + "Error while reading from socket: " + e);
+			
+			// clean the input stream
+			try
+			{
+				while(this.inputStream.read()!=-1);
+			}
+			catch (IOException e1)
+			{
+				// debug
+				System.err.println(ModbusRTUTCPTransport.logId + "Error while emptying input buffer from socket: " + e);
+			}
 			
 			// wrap and re-throw
 			throw new ModbusIOException("I/O exception - failed to read.\n" + e);

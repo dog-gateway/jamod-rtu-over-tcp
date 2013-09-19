@@ -7,6 +7,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import net.wimpi.modbus.Modbus;
 import net.wimpi.modbus.ModbusIOException;
@@ -42,6 +44,15 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 	// the socket used by this transport
 	private Socket socket;
 	
+	// the read timeout timer
+	private Timer readTimeoutTimer;
+	
+	// the read timout
+	private int readTimeout = 5000; // ms
+	
+	// the timeou flag
+	private boolean isTimedOut;
+	
 	/**
 	 * @param socket
 	 * @throws IOException
@@ -52,6 +63,12 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		// prepare the input and output streams...
 		if (socket != null)
 			this.setSocket(socket);
+		
+		// prepare the read timeout timer
+		this.readTimeoutTimer = new Timer();
+		
+		// set the timed out flag at false
+		this.isTimedOut = false;
 	}
 	
 	/**
@@ -164,25 +181,42 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		// the received response
 		ModbusResponse response = null;
 		
+		// reset the timed out flag
+		this.isTimedOut = false;
+		
+		// init and start the timeout timer
+		this.readTimeoutTimer.schedule(new TimerTask() {
+			
+			@Override
+			public void run()
+			{
+				isTimedOut = true;
+			}
+		}, this.readTimeout);
+		
 		try
 		{
 			// atomic access to the input buffer
 			synchronized (inputBuffer)
 			{
-				//clean the input buffer
-				inputBuffer.reset(new byte [Modbus.MAX_MESSAGE_LENGTH]);
+				// clean the input buffer
+				inputBuffer.reset(new byte[Modbus.MAX_MESSAGE_LENGTH]);
 				
 				// sleep for the time needed to receive the first part of the
 				// response
 				int available = this.inputStream.available();
-				while (available < 4)
+				while ((available < 4) && (!this.isTimedOut))
 				{
 					Thread.yield(); // 1ms * #bytes (4bytes in the worst case)
 					available = this.inputStream.available();
 					
-					if(Modbus.debug)
-						System.out.println("Available bytes: "+available);
+					if (Modbus.debug)
+						System.out.println("Available bytes: " + available);
 				}
+				
+				// check if timedOut
+				if (this.isTimedOut)
+					throw new ModbusIOException("I/O exception - read timeout.\n");
 				
 				// get a reference to the inner byte buffer
 				byte inBuffer[] = this.inputBuffer.getBuffer();
@@ -209,10 +243,22 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				
 				// sleep for the time needed to receive the first part of the
 				// response
-				while (this.inputStream.available() < (packetLength-3))
+				while ((this.inputStream.available() < (packetLength - 3)) && (!this.isTimedOut))
 				{
-					Thread.yield(); // 1ms * #bytes (4bytes in the worst case)
+					try
+					{
+						Thread.sleep(10);
+					}
+					catch (InterruptedException ie)
+					{
+						// do nothing
+						System.err.println("Sleep interrupted while waiting for response body...\n"+ie);
+					}
 				}
+				
+				// check if timedOut
+				if (this.isTimedOut)
+					throw new ModbusIOException("I/O exception - read timeout.\n");
 				
 				// read the remaining bytes
 				this.inputStream.read(inBuffer, 3, packetLength);
@@ -252,7 +298,8 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 			// clean the input stream
 			try
 			{
-				while(this.inputStream.read()!=-1);
+				while (this.inputStream.read() != -1)
+					;
 			}
 			catch (IOException e1)
 			{
@@ -263,6 +310,9 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 			// wrap and re-throw
 			throw new ModbusIOException("I/O exception - failed to read.\n" + e);
 		}
+		
+		// reset the timeout timer
+		this.readTimeoutTimer.cancel();
 		
 		// return the response read from the socket stream
 		return response;

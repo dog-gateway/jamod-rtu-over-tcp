@@ -64,9 +64,6 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		if (socket != null)
 			this.setSocket(socket);
 		
-		// prepare the read timeout timer
-		this.readTimeoutTimer = new Timer();
-		
 		// set the timed out flag at false
 		this.isTimedOut = false;
 	}
@@ -185,6 +182,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 		this.isTimedOut = false;
 		
 		// init and start the timeout timer
+		this.readTimeoutTimer = new Timer();
 		this.readTimeoutTimer.schedule(new TimerTask() {
 			
 			@Override

@@ -1,0 +1,16 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Jamod-rtu-over-tcp
+Bundle-SymbolicName: org.doggateway.jamod-rtu-over-tcp
+Bundle-Version: 1.0.0
+Bundle-Vendor: The Dog gateway
+Import-Package: gnu.io;version="1.0.0"
+Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+Export-Package: net.wimpi.modbus,
+ net.wimpi.modbus.cmd,
+ net.wimpi.modbus.facade,
+ net.wimpi.modbus.io,
+ net.wimpi.modbus.msg,
+ net.wimpi.modbus.net,
+ net.wimpi.modbus.procimg,
+ net.wimpi.modbus.util

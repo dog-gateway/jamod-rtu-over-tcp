@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>jamod-rtu-over-tcp</name>
+	<name>org.doggateway.libraries.jamod-rtu-over-tcp</name>
 	<comment></comment>
 	<projects>
 	</projects>

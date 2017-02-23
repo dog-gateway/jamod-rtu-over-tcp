@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Jamod-rtu-over-tcp
-Bundle-SymbolicName: org.doggateway.jamod-rtu-over-tcp
+Bundle-Name: org.doggateway.libraries.jamod-rtu-over-tcp
+Bundle-SymbolicName: org.doggateway.libraries.jamod-rtu-over-tcp
 Bundle-Version: 1.0.0
 Bundle-Vendor: The Dog gateway
 Import-Package: gnu.io;version="1.0.0"

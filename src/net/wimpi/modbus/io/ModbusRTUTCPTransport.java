@@ -142,7 +142,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				this.outputStream.flush();
 				
 				// debug
-				// if (Modbus.debug)
+				if (Modbus.debug)
 				System.out.println("Sent: " + ModbusUtil.toHex(rawBuffer, 0, bufferLength));
 				
 				// store the written buffer as the last request
@@ -227,12 +227,14 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				int packetId = inputBuffer.readUnsignedByte();
 				
 				// debug
+				if (Modbus.debug)
 				System.out.println(ModbusRTUTCPTransport.logId + "Read packet with progressive id: " + packetId);
 				
 				// read the function code
 				int functionCode = inputBuffer.readUnsignedByte();
 				
 				// debug
+				if (Modbus.debug)
 				System.out.println(" uid: " + packetId + ", function code: " + functionCode);
 				
 				// compute the number of bytes composing the message (including
@@ -262,6 +264,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 				this.inputStream.read(inBuffer, 3, packetLength);
 				
 				// debug
+				if (Modbus.debug)
 				System.out.println(" bytes: " + ModbusUtil.toHex(inBuffer, 0, packetLength) + ", desired length: "
 						+ packetLength);
 				

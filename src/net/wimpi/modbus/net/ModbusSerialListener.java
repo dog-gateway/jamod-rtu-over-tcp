@@ -77,7 +77,7 @@ public class ModbusSerialListener
   public void run() {
     try {
       m_Listening = true;
-      m_SerialCon.open();
+      m_SerialCon.open(Modbus.DEFAULT_TIMEOUT);
       //System.out.println("Opened Serial connection.");
       ModbusTransport transport = m_SerialCon.getModbusTransport();
       do {

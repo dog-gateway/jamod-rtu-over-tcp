@@ -16,6 +16,7 @@
 
 package net.wimpi.modbus.facade;
 
+import net.wimpi.modbus.Modbus;
 import net.wimpi.modbus.ModbusCoupler;
 import net.wimpi.modbus.ModbusException;
 import net.wimpi.modbus.io.ModbusSerialTransaction;
@@ -98,7 +99,7 @@ public class ModbusSerialMaster {
   public void connect()
       throws Exception {
     if (m_Connection != null && !m_Connection.isOpen()) {
-      m_Connection.open();
+      m_Connection.open(Modbus.DEFAULT_TIMEOUT);
       m_Transaction = new ModbusSerialTransaction(m_Connection);
     }
   }//connect

@@ -88,7 +88,7 @@ public class SerialDITest {
 
       //4. Open the connection
       con = new SerialConnection(params);
-      con.open();
+      con.open(Modbus.DEFAULT_TIMEOUT);
 
 
       //5. Prepare a request

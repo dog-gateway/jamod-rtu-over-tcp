@@ -87,7 +87,7 @@ public class SerialAITest {
 
       //4. Open the connection
       con = new SerialConnection(params);
-      con.open();
+      con.open(Modbus.DEFAULT_TIMEOUT);
 
       //5. Prepare a request
       req = new ReadInputRegistersRequest(ref, count);

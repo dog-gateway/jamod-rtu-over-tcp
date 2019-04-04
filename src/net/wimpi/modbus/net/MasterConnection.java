@@ -13,6 +13,8 @@ public interface MasterConnection
 	
 	public void connect() throws Exception;
 	
+	public void connect(int timeout) throws Exception;
+	
 	public boolean isConnected();
 	
 	public void close();

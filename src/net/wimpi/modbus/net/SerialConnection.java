@@ -79,7 +79,7 @@ public class SerialConnection
    *
    * @throws Exception if an error occurs.
    */
-  public void open() throws Exception {
+  public void open(int timeout) throws Exception {
 
 
     //1. obtain a CommPortIdentifier instance
@@ -95,7 +95,7 @@ public class SerialConnection
     //2. open the port, wait for given timeout
     try {
       m_SerialPort = (SerialPort)
-          m_PortIdentifyer.open("Modbus Serial Master", 30000);
+          m_PortIdentifyer.open("Modbus Serial Master", timeout);
     } catch (PortInUseException e) {
       if(Modbus.debug) System.out.println(e.getMessage());
 

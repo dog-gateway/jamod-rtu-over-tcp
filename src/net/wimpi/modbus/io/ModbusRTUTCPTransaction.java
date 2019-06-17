@@ -201,7 +201,7 @@ public class ModbusRTUTCPTransaction implements ModbusTransaction
 				}
 				catch (ModbusIOException ex)
 				{
-					if (retryCounter == m_Retries)
+					if (retryCounter == m_Retries-1)
 					{
 						throw new ModbusIOException("Executing transaction failed (tried " + m_Retries + " times)");
 					}

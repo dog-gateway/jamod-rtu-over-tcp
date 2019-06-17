@@ -193,7 +193,7 @@ public class ModbusTCPTransaction
           m_Response = m_IO.readResponse();
           break;
         } catch (ModbusIOException ex) {
-          if (retryCounter == m_Retries) {
+          if (retryCounter == m_Retries-1) {
             throw new ModbusIOException("Executing transaction failed (tried " + m_Retries + " times)");
           } else {
             retryCounter++;

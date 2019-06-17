@@ -212,7 +212,7 @@ public class ModbusTCPTransport
          return response;
          */
     } catch (Exception ex) {
-      ex.printStackTrace();
+      //ex.printStackTrace();
       throw new ModbusIOException("I/O exception - failed to read.");
     }
   }//readResponse

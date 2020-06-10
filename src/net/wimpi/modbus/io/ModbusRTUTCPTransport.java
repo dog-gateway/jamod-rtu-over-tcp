@@ -114,7 +114,6 @@ public class ModbusRTUTCPTransport implements ModbusTransport
             // atomic access to the output buffer
             synchronized (this.outputBuffer)
             {
-
                 // reset the output buffer
                 this.outputBuffer.reset();
 
@@ -248,7 +247,11 @@ public class ModbusRTUTCPTransport implements ModbusTransport
 
                 // compute the number of bytes composing the message (including
                 // the CRC = 2bytes)
-                int packetLength = this.computePacketLength(functionCode);
+                LengthOffset packetLengthOffest = this
+                        .computePacketLength(functionCode);
+
+                // get the packet length
+                int packetLength = packetLengthOffest.getLength();
 
                 if (packetLength > 0)
                 {
@@ -278,7 +281,8 @@ public class ModbusRTUTCPTransport implements ModbusTransport
                                 "I/O exception - read timeout.\n");
 
                     // read the remaining bytes
-                    this.inputStream.read(inBuffer, 3, packetLength);
+                    this.inputStream.read(inBuffer,
+                            2 + packetLengthOffest.getOffset(), packetLength);
 
                     // debug
                     if (Modbus.debug)
@@ -352,104 +356,14 @@ public class ModbusRTUTCPTransport implements ModbusTransport
         // return the response read from the socket stream
         return response;
 
-        /*-------------------------- SERIAL IMPLEMENTATION -----------------------------------
-        
-        try
-        {
-        	do
-        	{
-        		// block the input stream
-        		synchronized (byteInputStream)
-        		{
-        			// get the packet uid
-        			int uid = inputStream.read();
-        			
-        			if (Modbus.debug)
-        				System.out.println(ModbusRTUTCPTransport.logId + "UID: " + uid);
-        			
-        			// if the uid is valid (i.e., > 0) continue
-        			if (uid != -1)
-        			{
-        				// get the function code
-        				int fc = inputStream.read();
-        				
-        				if (Modbus.debug)
-        					System.out.println(ModbusRTUTCPTransport.logId + "Function code: " + uid);
-        				
-        				//bufferize the response
-        				byteOutputStream.reset();
-        				byteOutputStream.writeByte(uid);
-        				byteOutputStream.writeByte(fc);
-        				
-        				// create the Modbus Response object to acquire length of message
-        				response = ModbusResponse.createModbusResponse(fc);
-        				response.setHeadless();
-        				
-        				// With Modbus RTU, there is no end frame. Either we
-        				// assume the message is complete as is or we must do
-        				// function specific processing to know the correct length. 
-        				
-        				//bufferize the response according to the given function code
-        				getResponse(fc, byteOutputStream);
-        				
-        				//compute the response length without considering the CRC
-        				dlength = byteOutputStream.size() - 2; // less the crc
-        				
-        				//debug
-        				if (Modbus.debug)
-        					System.out.println("Response: "
-        							+ ModbusUtil.toHex(byteOutputStream.getBuffer(), 0, dlength + 2));
-        				
-        				//TODO: check if needed (restore the buffer state, cursor at 0, same content)
-        				byteInputStream.reset(inputBuffer, dlength);
-        				
-        				// cmopute the buffer CRC
-        				int[] crc = ModbusUtil.calculateCRC(inputBuffer, 0, dlength); 
-        				
-        				// check the CRC against the received one...
-        				if (ModbusUtil.unsignedByteToInt(inputBuffer[dlength]) != crc[0]
-        						|| ModbusUtil.unsignedByteToInt(inputBuffer[dlength + 1]) != crc[1])
-        				{
-        					throw new IOException("CRC Error in received frame: " + dlength + " bytes: "
-        							+ ModbusUtil.toHex(byteInputStream.getBuffer(), 0, dlength));
-        				}
-        			}
-        			else
-        			{
-        				throw new IOException("Error reading response");
-        			}
-        			
-        			// restore the buffer state, cursor at 0, same content
-        			byteInputStream.reset(inputBuffer, dlength);
-        			
-        			//actually read the response
-        			if (response != null)
-        			{
-        				response.readFrom(byteInputStream);
-        			}
-        			
-        			//flag completion...
-        			done = true;
-        			
-        		}// synchronized
-        	}
-        	while (!done);
-        	return response;
-        }
-        catch (Exception ex)
-        {
-        	System.err.println("Last request: " + ModbusUtil.toHex(lastRequest));
-        	System.err.println(ex.getMessage());
-        	throw new ModbusIOException("I/O exception - failed to read");
-        }
-        
-        ------------------------------------------------------------------------------*/
     }// readResponse
 
-    private int computePacketLength(int functionCode) throws IOException
+    private LengthOffset computePacketLength(int functionCode)
+            throws IOException
     {
         // packet length by function code:
         int length = 0;
+        int offset = 0;
 
         switch (functionCode)
         {
@@ -468,6 +382,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
                 this.inputStream.read(inBuffer, 2, 1);
                 int dataLength = this.inputBuffer.readUnsignedByte();
                 length = dataLength + 5; // UID+FC+CRC(2bytes)
+                offset = 1; // the size of the data length field
                 break;
             }
             case 0x05:
@@ -475,10 +390,11 @@ public class ModbusRTUTCPTransport implements ModbusTransport
             case 0x0B:
             case 0x0F:
             case 0x10:
+            case 0x16:
             {
                 // read status: only the CRC remains after address and
                 // function code
-                length = 6;
+                length = 8;
                 break;
             }
             case 0x07:
@@ -487,17 +403,13 @@ public class ModbusRTUTCPTransport implements ModbusTransport
                 length = 3;
                 break;
             }
-            case 0x16:
-            {
-                length = 8;
-                break;
-            }
             case 0x18:
             {
                 // get a reference to the inner byte buffer
                 byte inBuffer[] = this.inputBuffer.getBuffer();
                 this.inputStream.read(inBuffer, 2, 2);
                 length = this.inputBuffer.readUnsignedShort() + 6;// UID+FC+CRC(2bytes)
+                offset = 2; // the size of the data length field
                 break;
             }
             case 0x83:
@@ -508,7 +420,7 @@ public class ModbusRTUTCPTransport implements ModbusTransport
             }
         }
 
-        return length;
+        return new LengthOffset(length, offset);
     }
 
     @Override
@@ -518,39 +430,42 @@ public class ModbusRTUTCPTransport implements ModbusTransport
         outputStream.close();
     }// close
 
-    /*
-     * private void getResponse(int fn, BytesOutputStream out) throws
-     * IOException { int bc = -1, bc2 = -1, bcw = -1; int inpBytes = 0; byte
-     * inpBuf[] = new byte[256];
+    /**
+     * A private inner class to hold the tuple packet length / packet offset.
      * 
-     * try { switch (fn) { case 0x01: case 0x02: case 0x03: case 0x04: case
-     * 0x0C: case 0x11: // report slave ID version and run/stop state case 0x14:
-     * // read log entry (60000 memory reference) case 0x15: // write log entry
-     * (60000 memory reference) case 0x17: // read the byte count; bc =
-     * inputStream.read(); out.write(bc); // now get the specified number of
-     * bytes and the 2 CRC bytes setReceiveThreshold(bc + 2); inpBytes =
-     * inputStream.read(inpBuf, 0, bc + 2); out.write(inpBuf, 0, inpBytes);
-     * m_CommPort.disableReceiveThreshold(); if (inpBytes != bc + 2) {
-     * System.out.println("Error: looking for " + (bc + 2) + " bytes, received "
-     * + inpBytes); } break; case 0x05: case 0x06: case 0x0B: case 0x0F: case
-     * 0x10: // read status: only the CRC remains after address and // function
-     * code setReceiveThreshold(6); inpBytes = inputStream.read(inpBuf, 0, 6);
-     * out.write(inpBuf, 0, inpBytes); m_CommPort.disableReceiveThreshold();
-     * break; case 0x07: case 0x08: // read status: only the CRC remains after
-     * address and // function code setReceiveThreshold(3); inpBytes =
-     * inputStream.read(inpBuf, 0, 3); out.write(inpBuf, 0, inpBytes);
-     * m_CommPort.disableReceiveThreshold(); break; case 0x16: // eight bytes in
-     * addition to the address and function codes setReceiveThreshold(8);
-     * inpBytes = inputStream.read(inpBuf, 0, 8); out.write(inpBuf, 0,
-     * inpBytes); m_CommPort.disableReceiveThreshold(); break; case 0x18: //
-     * read the byte count word bc = inputStream.read(); out.write(bc); bc2 =
-     * inputStream.read(); out.write(bc2); bcw = ModbusUtil.makeWord(bc, bc2);
-     * // now get the specified number of bytes and the 2 CRC bytes
-     * setReceiveThreshold(bcw + 2); inpBytes = inputStream.read(inpBuf, 0, bcw
-     * + 2); out.write(inpBuf, 0, inpBytes);
-     * m_CommPort.disableReceiveThreshold(); break; } } catch (IOException e) {
-     * m_CommPort.disableReceiveThreshold(); throw new
-     * IOException("getResponse serial port exception"); } }// getResponse
+     * @author bonino
+     *
      */
+    private class LengthOffset
+    {
+        private int length;
+        private int offset;
 
+        /**
+         * @param lenght
+         * @param offset
+         */
+        public LengthOffset(int lenght, int offset)
+        {
+            this.length = lenght;
+            this.offset = offset;
+        }
+
+        /**
+         * @return the lenght
+         */
+        public int getLength()
+        {
+            return length;
+        }
+
+        /**
+         * @return the offset
+         */
+        public int getOffset()
+        {
+            return offset;
+        }
+
+    }
 }
